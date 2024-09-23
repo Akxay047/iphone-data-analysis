@@ -8,11 +8,11 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 
-#reading the data set which is in csv format 
+# Reading the data set from S3
 df = spark.read.format("csv")\
     .option("header", "true")\
     .option("inferSchema", "true")\
-    .load("apache-spark-with-data-bricks-for-data-engineering-main/data/apple_data/apple_products.csv")
+    .load("s3://your-bucket-name/path-to-your-data/apple_products.csv")
 
 
 
@@ -113,7 +113,16 @@ df = df.withColumn("Rating Category", categorize_rating_udf(col("Star Rating")))
 df.select("Star Rating", "Rating Category").show()
 
 
+# Creating another dataframe for joining
+df2 = df.select("Product Name", "Sale Price", "Mrp", "Number Of Reviews", "Ram")\
+    .withColumnRenamed("Sale Price", "Price")
 
+# Joining both dataframes
+joined_df = df.join(df2, on="Product Name", how="inner")
 
+# Saving the joined dataframe to S3 in parquet format
+joined_df.write.format("parquet")\
+    .mode("overwrite")\
+    .save("s3://your-bucket-name/path-to-save-data/joined_apple_products.parquet")
 
 
