@@ -1,18 +1,28 @@
+import sys
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.utils import getResolvedOptions
+from awsglue.dynamicframe import DynamicFrame
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.types import * 
+from pyspark.sql.types import *
 
-#creating spark session or entry point  
-spark = SparkSession.builder \
-    .appName("iphone-data-analysis-df") \
-    .getOrCreate()
+# Initialize Glue and Spark context
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
 
+# Reading the CSV from S3 using Glue DynamicFrame
+input_dynamic_frame = glueContext.create_dynamic_frame.from_options(
+    format_options={"withHeader": True},
+    connection_type="s3",
+    format="csv",
+    connection_options={"paths": ["s3://your-bucket-name/path-to-your-data/apple_products.csv"]},
+    transformation_ctx="input_dynamic_frame"
+)
 
-# Reading the data set from S3
-df = spark.read.format("csv")\
-    .option("header", "true")\
-    .option("inferSchema", "true")\
-    .load("s3://your-bucket-name/path-to-your-data/apple_products.csv")
+# Convert to DataFrame
+df = input_dynamic_frame.toDF()
 
 
 
@@ -120,9 +130,17 @@ df2 = df.select("Product Name", "Sale Price", "Mrp", "Number Of Reviews", "Ram")
 # Joining both dataframes
 joined_df = df.join(df2, on="Product Name", how="inner")
 
-# Saving the joined dataframe to S3 in parquet format
-joined_df.write.format("parquet")\
-    .mode("overwrite")\
-    .save("s3://your-bucket-name/path-to-save-data/joined_apple_products.parquet")
+# Convert DataFrame back to DynamicFrame for Glue
+output_dynamic_frame = DynamicFrame.fromDF(joined_df, glueContext, "output_dynamic_frame")
+
+# Save the DynamicFrame to S3 in parquet format
+glueContext.write_dynamic_frame.from_options(
+    frame=output_dynamic_frame,
+    connection_type="s3",
+    format="parquet",
+    connection_options={"path": "s3://your-bucket-name/path-to-save-data/joined_apple_products.parquet"},
+    transformation_ctx="output_dynamic_frame"
+)
+
 
 
